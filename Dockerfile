@@ -8,12 +8,13 @@ WORKDIR /app
 COPY server/package*.json ./server/
 RUN npm --prefix server install --omit=dev
 
-# Install frontend dependencies and build
-COPY sim-app/package*.json ./sim-app/
-RUN npm --prefix sim-app install --include=dev
+# Install frontend dependencies (ignore Windows lockfile so Linux native @rolldown/binding-linux-x64-gnu is installed)
+COPY sim-app/package.json ./sim-app/
+RUN npm --prefix sim-app install --include=dev --no-package-lock
 
 COPY server ./server
 COPY sim-app ./sim-app
+RUN rm -f sim-app/package-lock.json
 
 ARG SIM_VERSION=2.0.0
 ENV SIM_VERSION=${SIM_VERSION}
