@@ -1,0 +1,13 @@
+{
+  "name": "portfolio-simulator-2",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "npm --prefix server install --omit=dev && npm --prefix sim-app install --include=dev && npm --prefix sim-app run build",
+    "start": "node server/src/index.js"
+  }
+}
