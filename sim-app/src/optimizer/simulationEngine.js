@@ -98,6 +98,9 @@ export function computeDefaultScenarioSeed(cfg = {}) {
     cfg.benefitsEnabled ? "ben1" : "ben0",
     cfg.partialCreditEnabled ? "pc1" : "pc0",
     `var${cfg.scenarioVariant || 1}`,
+    ...(Number(cfg.fundingGrowthRate || 0) > 0
+      ? [`fg${Number(cfg.fundingGrowthRate).toFixed(4)}`]
+      : []),
   ].join("|");
   return hashString32(sig) % 900000000 + 10000000;
 }
@@ -116,10 +119,12 @@ export function computeScenarioKey(sim) {
     )
     .join(",");
   const projHash = hashString32(projFp).toString(36);
+  const fg = Number(sim.fundingGrowthRate ?? c.fundingGrowthRate ?? 0);
   const cfgParts = [
     `s${sim.seed}`,
     `b${Number(sim.totalBudget || 0).toFixed(1)}`,
     `r${Number(sim.annualRate || 0).toFixed(3)}`,
+    ...(fg > 0 ? [`fg${fg.toFixed(3)}`] : []),
     `fp-${c.fundingProfile || "scurve"}`,
     `fq${c.fundingFrequency ?? 3}`,
     `pol${c.politicalProjects ?? 0}`,
@@ -216,19 +221,42 @@ export function maxCompletions(projects, totalBudget) {
   return Math.max(1, c);
 }
 
-export function computeReleaseSchedule(totalBudget, profile, rng2, N = 20) {
-  const norm = (w) => { const s = w.reduce((a, b) => a + b, 0); return w.map((v) => +(v * totalBudget / s).toFixed(4)); };
+export function computeReleaseSchedule(
+  nominalBudget,
+  profile,
+  rng2,
+  N = 20,
+  fundingGrowthRate = 0,
+  fundingFrequency = 3
+) {
+  const norm = (w) => {
+    const s = w.reduce((a, b) => a + b, 0);
+    return w.map((v) => +(v * nominalBudget / s).toFixed(4));
+  };
+  let base;
   if (profile === "scurve") {
     const w = Array.from({ length: N }, (_, i) => betaCDF((i + 1) / N) - betaCDF(i / N));
-    return norm(w);
-  }
-  if (profile === "frontloaded") return norm(Array.from({ length: N }, (_, i) => N - i));
-  if (profile === "backloaded")  return norm(Array.from({ length: N }, (_, i) => i + 1));
-  if (profile === "volatile") {
+    base = norm(w);
+  } else if (profile === "frontloaded") {
+    base = norm(Array.from({ length: N }, (_, i) => N - i));
+  } else if (profile === "backloaded") {
+    base = norm(Array.from({ length: N }, (_, i) => i + 1));
+  } else if (profile === "volatile") {
     const w = Array.from({ length: N }, () => 0.8 + rng2() * 0.4);
-    return norm(w);
+    base = norm(w);
+  } else {
+    base = Array(N).fill(+(nominalBudget / N).toFixed(4));
   }
-  return Array(N).fill(+(totalBudget / N).toFixed(4));
+
+  const g = Number(fundingGrowthRate || 0);
+  if (!g || Math.abs(g) < 1e-8) return base;
+
+  const freq = Math.max(1, Number(fundingFrequency || Math.round(60 / N) || 3));
+  return base.map((val, idx) => {
+    const monthElapsed = idx * freq;
+    const growthFactor = Math.pow(1 + g, monthElapsed / 12);
+    return +(val * growthFactor).toFixed(4);
+  });
 }
 
 export function hydrateCustomProjects(templates, riskMultiplier) {
@@ -286,6 +314,7 @@ export function newSim(cfg) {
     playerName = "Anonymous",
     preset = "custom",
     annualRate = 0.03,
+    fundingGrowthRate = 0,
     fundingProfile = "flat",
     budgetTightness = 1.5,
     customTotalBudget = null,
@@ -313,6 +342,7 @@ export function newSim(cfg) {
           preset,
           customPortfolioId,
           annualRate,
+          fundingGrowthRate,
           fundingProfile,
           fundingFrequency,
           budgetTightness,
@@ -341,13 +371,24 @@ export function newSim(cfg) {
   }
 
   const sumBac = projects.reduce((a, p) => a + p.bacInitial, 0);
-  const totalBudget =
+  const nominalBudget =
     customTotalBudget != null && Number(customTotalBudget) > 0
       ? +Number(customTotalBudget).toFixed(2)
       : +(sumBac / budgetTightness).toFixed(2);
 
   const N = Math.round(60 / fundingFrequency);
-  const releaseSchedule = computeReleaseSchedule(totalBudget, fundingProfile, rng, N);
+  const releaseSchedule = computeReleaseSchedule(
+    nominalBudget,
+    fundingProfile,
+    rng,
+    N,
+    fundingGrowthRate,
+    fundingFrequency
+  );
+  const totalBudget =
+    Number(fundingGrowthRate || 0) !== 0
+      ? +releaseSchedule.reduce((a, b) => a + b, 0).toFixed(2)
+      : nominalBudget;
   const monthlyRate = Math.pow(1 + annualRate, 1 / 12) - 1;
 
   const activateAsPolitical = (p) => {
@@ -376,6 +417,8 @@ export function newSim(cfg) {
     playerName,
     month: 1,
     annualRate, monthlyRate,
+    fundingGrowthRate: Number(fundingGrowthRate || 0),
+    nominalBudget,
     totalBudget,
     releaseSchedule,
     quarterlyRelease: releaseSchedule[0],
@@ -388,6 +431,8 @@ export function newSim(cfg) {
     startedAt: Date.now(),
     config: {
       fundingProfile, fundingFrequency, budgetTightness,
+      fundingGrowthRate: Number(fundingGrowthRate || 0),
+      nominalBudget,
       customTotalBudget: customTotalBudget != null && Number(customTotalBudget) > 0 ? +Number(customTotalBudget).toFixed(2) : null,
       customPortfolioId, customPortfolioName,
       politicalProjects, concurrentCap, approvalLag, riskMultiplier,

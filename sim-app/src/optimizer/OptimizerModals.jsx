@@ -2373,10 +2373,13 @@ export function ResearchRunReportModal({
                               </td>
                               <td style={{ padding: "9px 8px", textAlign: "center", fontSize: 10.5, color: T.muted, lineHeight: 1.4, ...mono }}>
                                 <div style={{ fontWeight: 700, color: T.text }}>
-                                  {money(e.config?.totalBudget)} ({e.config?.budgetTightness ?? 1.5}×) · {((e.config?.annualRate || 0) * 100).toFixed(1)}% inf
+                                  {(e.config?.fundingGrowthRate || 0) > 0
+                                    ? `${money(e.config?.nominalBudget ?? e.config?.totalBudget)}→${money(e.config?.totalBudget)}`
+                                    : `${money(e.config?.totalBudget)} (${e.config?.budgetTightness ?? 1.5}×)`}{" "}
+                                  · {((e.config?.annualRate || 0) * 100).toFixed(1)}% inf
                                 </div>
                                 <div style={{ fontSize: 10, color: T.faint }}>
-                                  {e.config?.fundingProfile || "scurve"} ({e.config?.fundingFrequency ?? 3}m) · Risk {(e.config?.riskMultiplier ?? 1).toFixed(1)}×
+                                  Grw {((e.config?.fundingGrowthRate || 0) * 100).toFixed(1)}% · {e.config?.fundingProfile || "scurve"} ({e.config?.fundingFrequency ?? 3}m) · Risk {(e.config?.riskMultiplier ?? 1).toFixed(1)}×
                                 </div>
                                 <div style={{ fontSize: 10, color: T.faint }}>
                                   Lag {e.config?.approvalLag ?? 0}m · Cap {e.config?.concurrentCap ? e.config.concurrentCap : "∞"} · Pol {e.config?.politicalProjects ?? 0}

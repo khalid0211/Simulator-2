@@ -202,19 +202,42 @@ function maxCompletions(projects, totalBudget) {
   return Math.max(1, c);
 }
 
-function computeReleaseSchedule(totalBudget, profile, rng2, N = 20) {
-  const norm = (w) => { const s = w.reduce((a, b) => a + b, 0); return w.map((v) => +(v * totalBudget / s).toFixed(4)); };
+function computeReleaseSchedule(
+  nominalBudget,
+  profile,
+  rng2,
+  N = 20,
+  fundingGrowthRate = 0,
+  fundingFrequency = 3
+) {
+  const norm = (w) => {
+    const s = w.reduce((a, b) => a + b, 0);
+    return w.map((v) => +(v * nominalBudget / s).toFixed(4));
+  };
+  let base;
   if (profile === "scurve") {
     const w = Array.from({ length: N }, (_, i) => betaCDF((i + 1) / N) - betaCDF(i / N));
-    return norm(w);
-  }
-  if (profile === "frontloaded") return norm(Array.from({ length: N }, (_, i) => N - i));
-  if (profile === "backloaded")  return norm(Array.from({ length: N }, (_, i) => i + 1));
-  if (profile === "volatile") {
+    base = norm(w);
+  } else if (profile === "frontloaded") {
+    base = norm(Array.from({ length: N }, (_, i) => N - i));
+  } else if (profile === "backloaded") {
+    base = norm(Array.from({ length: N }, (_, i) => i + 1));
+  } else if (profile === "volatile") {
     const w = Array.from({ length: N }, () => 0.8 + rng2() * 0.4);
-    return norm(w);
+    base = norm(w);
+  } else {
+    base = Array(N).fill(+(nominalBudget / N).toFixed(4)); // flat
   }
-  return Array(N).fill(+(totalBudget / N).toFixed(4)); // flat
+
+  const g = Number(fundingGrowthRate || 0);
+  if (!g || Math.abs(g) < 1e-8) return base;
+
+  const freq = Math.max(1, Number(fundingFrequency || Math.round(60 / N) || 3));
+  return base.map((val, idx) => {
+    const monthElapsed = idx * freq;
+    const growthFactor = Math.pow(1 + g, monthElapsed / 12);
+    return +(val * growthFactor).toFixed(4);
+  });
 }
 
 function hydrateCustomProjects(templates, riskMultiplier) {
@@ -272,6 +295,7 @@ function newSim(cfg) {
     playerName = "Anonymous",
     preset = "custom",
     annualRate = 0.03,
+    fundingGrowthRate = 0,
     fundingProfile = "flat",
     budgetTightness = 1.5,
     customTotalBudget = null,
@@ -299,6 +323,7 @@ function newSim(cfg) {
           preset,
           customPortfolioId,
           annualRate,
+          fundingGrowthRate,
           fundingProfile,
           fundingFrequency,
           budgetTightness,
@@ -327,13 +352,24 @@ function newSim(cfg) {
   }
 
   const sumBac = projects.reduce((a, p) => a + p.bacInitial, 0);
-  const totalBudget =
+  const nominalBudget =
     customTotalBudget != null && Number(customTotalBudget) > 0
       ? +Number(customTotalBudget).toFixed(2)
       : +(sumBac / budgetTightness).toFixed(2);
 
   const N = Math.round(60 / fundingFrequency);
-  const releaseSchedule = computeReleaseSchedule(totalBudget, fundingProfile, rng, N);
+  const releaseSchedule = computeReleaseSchedule(
+    nominalBudget,
+    fundingProfile,
+    rng,
+    N,
+    fundingGrowthRate,
+    fundingFrequency
+  );
+  const totalBudget =
+    Number(fundingGrowthRate || 0) !== 0
+      ? +releaseSchedule.reduce((a, b) => a + b, 0).toFixed(2)
+      : nominalBudget;
   const monthlyRate = Math.pow(1 + annualRate, 1 / 12) - 1;
 
   // Force political projects into portfolio at start (pre-flagged in custom import + lowest alignment up to politicalProjects)
@@ -363,6 +399,8 @@ function newSim(cfg) {
     playerName,
     month: 1,
     annualRate, monthlyRate,
+    fundingGrowthRate: Number(fundingGrowthRate || 0),
+    nominalBudget,
     totalBudget,
     releaseSchedule,
     quarterlyRelease: releaseSchedule[0],
@@ -375,6 +413,8 @@ function newSim(cfg) {
     startedAt: Date.now(),
     config: {
       fundingProfile, fundingFrequency, budgetTightness,
+      fundingGrowthRate: Number(fundingGrowthRate || 0),
+      nominalBudget,
       customTotalBudget: customTotalBudget != null && Number(customTotalBudget) > 0 ? +Number(customTotalBudget).toFixed(2) : null,
       customPortfolioId, customPortfolioName,
       politicalProjects, concurrentCap, approvalLag, riskMultiplier,
@@ -411,10 +451,11 @@ function reconstructInitialSimFromSim(sim) {
     playerName: sim.playerName,
     preset: c.preset || "custom",
     annualRate: sim.annualRate,
+    fundingGrowthRate: sim.fundingGrowthRate ?? c.fundingGrowthRate ?? 0,
     fundingProfile: c.fundingProfile || "scurve",
     fundingFrequency: c.fundingFrequency ?? 3,
     budgetTightness: c.budgetTightness ?? 1.5,
-    customTotalBudget: sim.totalBudget,
+    customTotalBudget: sim.nominalBudget ?? c.nominalBudget ?? sim.totalBudget,
     customPortfolioId: c.customPortfolioId || "procedural",
     customPortfolioName: c.customPortfolioName || null,
     customProjects: baseTemplates,
@@ -2344,6 +2385,7 @@ function SetupScreen({
   }, []);
 
   const [annualRate,       setAnnualRate]       = useState(() => savedPrefs?.annualRate ?? 3);
+  const [fundingGrowthRate,setFundingGrowthRate]= useState(() => savedPrefs?.fundingGrowthRate ?? 0);
   const [fundingProfile,   setFundingProfile]   = useState(() => savedPrefs?.fundingProfile || "scurve");
   const [budgetTightness,  setBudgetTightness]  = useState(() => savedPrefs?.budgetTightness || "1.5");
   const [politicalProjects,setPoliticalProjects]= useState(() => savedPrefs?.politicalProjects ?? 2);
@@ -2367,6 +2409,7 @@ function SetupScreen({
       useExplicitBudget,
       customBudgetInput,
       annualRate,
+      fundingGrowthRate,
       fundingProfile,
       budgetTightness,
       politicalProjects,
@@ -2388,6 +2431,7 @@ function SetupScreen({
     useExplicitBudget,
     customBudgetInput,
     annualRate,
+    fundingGrowthRate,
     fundingProfile,
     budgetTightness,
     politicalProjects,
@@ -2405,6 +2449,7 @@ function SetupScreen({
     clearSetupPrefs();
     setName(defaultRunDateName());
     setAnnualRate(3);
+    setFundingGrowthRate(0);
     setFundingProfile("scurve");
     setFundingFrequency("3");
     setBudgetTightness("1.5");
@@ -2430,6 +2475,7 @@ function SetupScreen({
     if (p === "custom") { setShowCustom(true); return; }
     const d = DIFFICULTY_PRESETS[p];
     setAnnualRate(+(d.annualRate * 100).toFixed(1));
+    setFundingGrowthRate(0);
     setFundingProfile(d.fundingProfile);
     setBudgetTightness(String(d.budgetTightness));
     setPoliticalProjects(d.politicalProjects);
@@ -2456,6 +2502,7 @@ function SetupScreen({
       playerName: auth?.name || "Anonymous",
       preset,
       annualRate: annualRate / 100,
+      fundingGrowthRate: (showCustom || preset === "custom") ? fundingGrowthRate / 100 : 0,
       fundingProfile,
       budgetTightness: parseFloat(budgetTightness),
       customTotalBudget: explicitBudget,
@@ -2475,6 +2522,36 @@ function SetupScreen({
       goalRanking,
     };
   };
+
+  // Live preview of Nominal Budget vs Growth-Adjusted Real Budget on SetupScreen
+  const budgetPreview = useMemo(() => {
+    const isCustomPf = selectedPortfolio && selectedPortfolioId !== "procedural";
+    const basePoolBac = isCustomPf
+      ? Number(selectedPortfolio.totalBac || 255)
+      : 255; // typical 30-project procedural pool BAC (~$255M)
+    const nominal =
+      (isCustomPf || useExplicitBudget) && Number(customBudgetInput) > 0
+        ? +Number(customBudgetInput).toFixed(2)
+        : +(basePoolBac / (parseFloat(budgetTightness) || 1.5)).toFixed(2);
+    const freq = parseInt(fundingFrequency) || 3;
+    const N = Math.round(60 / freq);
+    const g = ((showCustom || preset === "custom") ? fundingGrowthRate : 0) / 100;
+    const sched = computeReleaseSchedule(nominal, fundingProfile, mkRng(12345), N, g, freq);
+    const realTotal = g !== 0 ? +sched.reduce((a, b) => a + b, 0).toFixed(2) : nominal;
+    const delta = +(realTotal - nominal).toFixed(2);
+    return { nominal, realTotal, delta, isCustomPf };
+  }, [
+    selectedPortfolio,
+    selectedPortfolioId,
+    useExplicitBudget,
+    customBudgetInput,
+    budgetTightness,
+    fundingFrequency,
+    fundingGrowthRate,
+    fundingProfile,
+    showCustom,
+    preset,
+  ]);
 
   const PRESETS = [
     { id: "learning", label: "Learning",  sub: "2% inflation · flat funding · no political · calm risk" },
@@ -2776,13 +2853,51 @@ function SetupScreen({
                       )}
                       {selectedPortfolio && (
                         <span style={{ fontSize: 11, color: T.completed, fontWeight: 600, ...mono }}>
-                          ~{maxCompletions(selectedPortfolio.projects, Number(customBudgetInput) || 0)}/{selectedPortfolio.projectCount} completable
+                          ~{maxCompletions(selectedPortfolio.projects, budgetPreview.realTotal || Number(customBudgetInput) || 0)}/{selectedPortfolio.projectCount} completable
                         </span>
                       )}
                     </div>
                   ) : (
                     <span style={{ fontSize: 11.5, color: T.muted }}>
                       Using Budget Tightness divisor ({budgetTightness}×)
+                    </span>
+                  )}
+                </div>
+
+                {/* Live Nominal Budget vs. Growth-Adjusted Real Total Budget Banner */}
+                <div
+                  style={{
+                    marginTop: 10,
+                    padding: "8px 11px",
+                    borderRadius: 8,
+                    background: fundingGrowthRate > 0 ? T.completed + "14" : T.panel,
+                    border: `1px solid ${fundingGrowthRate > 0 ? T.completed + "66" : T.lineSoft}`,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    flexWrap: "wrap",
+                    gap: 8,
+                    fontSize: 11.5,
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                    <span style={{ color: T.muted }}>
+                      {budgetPreview.isCustomPf || useExplicitBudget ? "Nominal Base Budget:" : "Est. Nominal Budget:"}
+                    </span>
+                    <strong style={{ color: T.text, ...mono }}>{money(budgetPreview.nominal)}</strong>
+                    <span style={{ color: T.faint }}>→</span>
+                    <span style={{ color: T.muted }}>Growth-Adjusted Real Budget ({fundingGrowthRate.toFixed(1)}% p.a.):</span>
+                    <strong style={{ color: fundingGrowthRate > 0 ? T.completed : T.text, fontSize: 12.5, ...mono }}>
+                      {money(budgetPreview.realTotal)}
+                    </strong>
+                  </div>
+                  {fundingGrowthRate > 0 ? (
+                    <Badge color={T.completed}>
+                      +{money(budgetPreview.delta)} (+{((budgetPreview.delta / Math.max(1, budgetPreview.nominal)) * 100).toFixed(1)}% cumulative funding growth)
+                    </Badge>
+                  ) : (
+                    <span style={{ fontSize: 11, color: T.faint }}>
+                      0.0% funding growth (fixed nominal budget)
                     </span>
                   )}
                 </div>
@@ -2856,7 +2971,27 @@ function SetupScreen({
                     Inflation rate — <span style={{ color: T.action, ...mono }}>{annualRate.toFixed(1)}% p.a.</span>
                   </label>
                   <input type="range" min={0} max={20} step={0.5} value={annualRate} onChange={(e) => setAnnualRate(+e.target.value)}
-                    style={{ width: "100%", marginBottom: 16, accentColor: T.action }} />
+                    style={{ width: "100%", marginBottom: 14, accentColor: T.action }} />
+
+                  <label style={{ fontSize: 12, color: T.muted, textTransform: "uppercase", letterSpacing: ".05em", display: "block", marginBottom: 4 }}>
+                    Funding growth rate — <span style={{ color: T.completed, ...mono }}>{fundingGrowthRate.toFixed(1)}% p.a.</span>
+                  </label>
+                  <div style={{ fontSize: 10.5, color: T.faint, marginBottom: 5, ...mono }}>
+                    Nominal {money(budgetPreview.nominal)} → Real {money(budgetPreview.realTotal)}
+                    {fundingGrowthRate > 0 ? ` (+${money(budgetPreview.delta)})` : ""}
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={20}
+                    step={0.5}
+                    value={fundingGrowthRate}
+                    onChange={(e) => {
+                      setPreset("custom");
+                      setFundingGrowthRate(+e.target.value);
+                    }}
+                    style={{ width: "100%", marginBottom: 16, accentColor: T.completed }}
+                  />
                   <SelectRow label="Funding profile"    value={fundingProfile}    onChange={setFundingProfile}    options={FUNDING_LABELS} />
                   <SelectRow label="Funding frequency"  value={fundingFrequency}  onChange={setFundingFrequency}  options={FREQ_LABELS} />
                   <SelectRow
@@ -5062,10 +5197,11 @@ export default function App() {
       playerName: `${rr.ownerName || "Player"} (AI Auto)`,
       preset: "custom",
       annualRate: c.annualRate ?? 0.03,
+      fundingGrowthRate: c.fundingGrowthRate ?? 0,
       fundingProfile: c.fundingProfile || "scurve",
       fundingFrequency: c.fundingFrequency ?? 3,
       budgetTightness: c.budgetTightness ?? 1.5,
-      customTotalBudget: c.totalBudget ?? null,
+      customTotalBudget: c.nominalBudget ?? c.totalBudget ?? null,
       customPortfolioId: rr.portfolioId,
       customPortfolioName: rr.portfolioName,
       customProjects: rr.projects,

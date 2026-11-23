@@ -317,7 +317,9 @@ export function buildResearchRunEntry({
     seed: initialSim.seed,
     goalRanking: goalRanking || DEFAULT_GOAL_RANKING,
     config: {
+      nominalBudget: initialSim.nominalBudget ?? initialSim.config?.nominalBudget ?? initialSim.totalBudget,
       totalBudget: initialSim.totalBudget,
+      fundingGrowthRate: initialSim.fundingGrowthRate ?? initialSim.config?.fundingGrowthRate ?? 0,
       annualRate: initialSim.annualRate,
       fundingProfile: initialSim.config?.fundingProfile || "scurve",
       fundingFrequency: initialSim.config?.fundingFrequency ?? 3,
@@ -598,7 +600,9 @@ export function exportResearchRunToExcel(researchRun) {
       "Suspensions": ac.suspend || 0,
       "Abandonments": m.abandonedCount ?? 0,
       "Expired": m.expiredCount ?? 0,
-      "Total Budget ($M)": +(e.config?.totalBudget || 0).toFixed(2),
+      "Nominal Budget ($M)": +(e.config?.nominalBudget ?? e.config?.totalBudget ?? 0).toFixed(2),
+      "Funding Growth (%)": +((e.config?.fundingGrowthRate || 0) * 100).toFixed(1),
+      "Real Total Budget ($M)": +(e.config?.totalBudget || 0).toFixed(2),
       "Budget Tightness (x)": +(e.config?.budgetTightness ?? 1.5),
       "Inflation (%)": +((e.config?.annualRate || 0) * 100).toFixed(1),
       "Funding Profile": e.config?.fundingProfile || "",
@@ -753,15 +757,15 @@ export function exportResearchRunToMarkdown(researchRun) {
     lines.push("### 2.1 Scenario Parameters Recorded Per Run");
     lines.push("");
     lines.push(
-      "| Run # | Budget ($M) | Tightness | Inflation | Funding Profile | Cadence | Risk Env | Political | Concurrent Cap | Approval Lag | ARC Wallet | Partial Credit | Seed |"
+      "| Run # | Nominal Budget | Funding Growth | Real Budget ($M) | Tightness | Inflation | Funding Profile | Cadence | Risk Env | Political | Concurrent Cap | Approval Lag | ARC Wallet | Partial Credit | Seed |"
     );
     lines.push(
-      "| :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |"
+      "| :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |"
     );
     entries.forEach((e) => {
       const c = e.config || {};
       lines.push(
-        `| **#${e.runNumber}** | ${money(c.totalBudget)} | ${c.budgetTightness ?? 1.5}× | ${((c.annualRate || 0) * 100).toFixed(1)}% | ${c.fundingProfile || "scurve"} | ${c.fundingFrequency ?? 3}m | ${(c.riskMultiplier ?? 1.0).toFixed(1)}× | ${c.politicalProjects ?? 0} | ${c.concurrentCap ? c.concurrentCap : "Unlimited"} | ${c.approvalLag ?? 0}m | ${c.arcEnabled ? "ON" : "OFF"} | ${c.partialCreditEnabled ? "ON" : "OFF"} | \`${e.seed ?? "—"}\` |`
+        `| **#${e.runNumber}** | ${money(c.nominalBudget ?? c.totalBudget)} | ${((c.fundingGrowthRate || 0) * 100).toFixed(1)}% | **${money(c.totalBudget)}** | ${c.budgetTightness ?? 1.5}× | ${((c.annualRate || 0) * 100).toFixed(1)}% | ${c.fundingProfile || "scurve"} | ${c.fundingFrequency ?? 3}m | ${(c.riskMultiplier ?? 1.0).toFixed(1)}× | ${c.politicalProjects ?? 0} | ${c.concurrentCap ? c.concurrentCap : "Unlimited"} | ${c.approvalLag ?? 0}m | ${c.arcEnabled ? "ON" : "OFF"} | ${c.partialCreditEnabled ? "ON" : "OFF"} | \`${e.seed ?? "—"}\` |`
       );
     });
   }
