@@ -2371,10 +2371,18 @@ export function ResearchRunReportModal({
                                 </strong>
                                 {isTopBen && <div style={{ fontSize: 9.5, color: T.completed, fontWeight: 700 }}>★ Peak BU</div>}
                               </td>
-                              <td style={{ padding: "9px 8px", textAlign: "center", fontSize: 11, color: T.muted, ...mono }}>
-                                {money(e.config?.totalBudget)} · {((e.config?.annualRate || 0) * 100).toFixed(1)}%
+                              <td style={{ padding: "9px 8px", textAlign: "center", fontSize: 10.5, color: T.muted, lineHeight: 1.4, ...mono }}>
+                                <div style={{ fontWeight: 700, color: T.text }}>
+                                  {money(e.config?.totalBudget)} ({e.config?.budgetTightness ?? 1.5}×) · {((e.config?.annualRate || 0) * 100).toFixed(1)}% inf
+                                </div>
                                 <div style={{ fontSize: 10, color: T.faint }}>
-                                  {e.config?.fundingProfile} · ARC {e.config?.arcEnabled ? "ON" : "OFF"}
+                                  {e.config?.fundingProfile || "scurve"} ({e.config?.fundingFrequency ?? 3}m) · Risk {(e.config?.riskMultiplier ?? 1).toFixed(1)}×
+                                </div>
+                                <div style={{ fontSize: 10, color: T.faint }}>
+                                  Lag {e.config?.approvalLag ?? 0}m · Cap {e.config?.concurrentCap ? e.config.concurrentCap : "∞"} · Pol {e.config?.politicalProjects ?? 0}
+                                </div>
+                                <div style={{ fontSize: 10, color: T.faint }}>
+                                  ARC {e.config?.arcEnabled ? "ON" : "OFF"} · Partial {e.config?.partialCreditEnabled ? "ON" : "OFF"} · #{e.seed}
                                 </div>
                               </td>
                               <td style={{ padding: "9px 8px", textAlign: "center", fontSize: 11, color: T.muted, ...mono }}>

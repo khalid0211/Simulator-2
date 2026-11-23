@@ -2073,6 +2073,34 @@ function SelectRow({ label, value, onChange, options, disabled }) {
   );
 }
 
+const SETUP_PREFS_KEY = "portfolio_sim_setup_prefs_v1";
+
+function loadSetupPrefs() {
+  try {
+    return JSON.parse(localStorage.getItem(SETUP_PREFS_KEY) || "null");
+  } catch {
+    return null;
+  }
+}
+
+function saveSetupPrefs(prefs) {
+  try {
+    localStorage.setItem(SETUP_PREFS_KEY, JSON.stringify(prefs));
+  } catch {}
+}
+
+function clearSetupPrefs() {
+  try {
+    localStorage.removeItem(SETUP_PREFS_KEY);
+  } catch {}
+}
+
+function defaultRunDateName() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  return `Portfolio ${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()}`;
+}
+
 function SetupScreen({
   onStart,
   onStartAutoOptimize,
@@ -2085,18 +2113,22 @@ function SetupScreen({
   onResume,
   hasSave,
 }) {
-  const [preset, setPreset] = useState("standard");
-  const [showCustom, setShowCustom] = useState(false);
+  const savedPrefs = useMemo(() => loadSetupPrefs(), []);
+
+  const [preset, setPreset] = useState(() => savedPrefs?.preset || "standard");
+  const [showCustom, setShowCustom] = useState(() =>
+    savedPrefs?.showCustom ?? (savedPrefs?.preset === "custom" ? true : false)
+  );
   const [showRules, setShowRules] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
-  const [goalRanking, setGoalRanking] = useState(DEFAULT_GOAL_RANKING);
+  const [goalRanking, setGoalRanking] = useState(() =>
+    Array.isArray(savedPrefs?.goalRanking) && savedPrefs.goalRanking.length === 4
+      ? savedPrefs.goalRanking
+      : DEFAULT_GOAL_RANKING
+  );
   const [isBatchRunning, setIsBatchRunning] = useState(false);
-  const [name, setName] = useState(() => {
-    const d = new Date();
-    const pad = (n) => String(n).padStart(2, "0");
-    return `Portfolio ${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()}`;
-  });
+  const [name, setName] = useState(() => savedPrefs?.name || defaultRunDateName());
 
   // Player registration
   const [auth, setAuthState] = useState(getAuth());
@@ -2109,9 +2141,15 @@ function SetupScreen({
 
   // Saved & Global Custom Portfolios
   const [portfolios, setPortfolios] = useState([]);
-  const [selectedPortfolioId, setSelectedPortfolioId] = useState("procedural");
-  const [useExplicitBudget, setUseExplicitBudget] = useState(false);
-  const [customBudgetInput, setCustomBudgetInput] = useState(170);
+  const [selectedPortfolioId, setSelectedPortfolioId] = useState(
+    () => savedPrefs?.selectedPortfolioId || "procedural"
+  );
+  const [useExplicitBudget, setUseExplicitBudget] = useState(
+    () => Boolean(savedPrefs?.useExplicitBudget)
+  );
+  const [customBudgetInput, setCustomBudgetInput] = useState(
+    () => savedPrefs?.customBudgetInput ?? 170
+  );
 
   const refreshPortfolios = async () => {
     const list = await fetchAvailablePortfolios();
@@ -2305,18 +2343,84 @@ function SetupScreen({
     return () => { live = false; };
   }, []);
 
-  const [annualRate,       setAnnualRate]       = useState(3);
-  const [fundingProfile,   setFundingProfile]   = useState("scurve");
-  const [budgetTightness,  setBudgetTightness]  = useState("1.5");
-  const [politicalProjects,setPoliticalProjects]= useState(2);
-  const [concurrentCap,    setConcurrentCap]    = useState("0");
-  const [approvalLag,      setApprovalLag]      = useState("0");
-  const [riskMultiplier,   setRiskMultiplier]   = useState("1.0");
-  const [visibility,       setVisibility]       = useState("full");
-  const [fundingFrequency, setFundingFrequency] = useState("3");
-  const [arcEnabled,       setArcEnabled]       = useState(true);
-  const [benefitsEnabled,  setBenefitsEnabled]  = useState(false);
-  const [partialCreditEnabled, setPartialCreditEnabled] = useState(false);
+  const [annualRate,       setAnnualRate]       = useState(() => savedPrefs?.annualRate ?? 3);
+  const [fundingProfile,   setFundingProfile]   = useState(() => savedPrefs?.fundingProfile || "scurve");
+  const [budgetTightness,  setBudgetTightness]  = useState(() => savedPrefs?.budgetTightness || "1.5");
+  const [politicalProjects,setPoliticalProjects]= useState(() => savedPrefs?.politicalProjects ?? 2);
+  const [concurrentCap,    setConcurrentCap]    = useState(() => savedPrefs?.concurrentCap || "0");
+  const [approvalLag,      setApprovalLag]      = useState(() => savedPrefs?.approvalLag || "0");
+  const [riskMultiplier,   setRiskMultiplier]   = useState(() => savedPrefs?.riskMultiplier || "1.0");
+  const [visibility,       setVisibility]       = useState(() => savedPrefs?.visibility || "full");
+  const [fundingFrequency, setFundingFrequency] = useState(() => savedPrefs?.fundingFrequency || "3");
+  const [arcEnabled,       setArcEnabled]       = useState(() => savedPrefs?.arcEnabled ?? true);
+  const [benefitsEnabled,  setBenefitsEnabled]  = useState(() => savedPrefs?.benefitsEnabled ?? false);
+  const [partialCreditEnabled, setPartialCreditEnabled] = useState(() => Boolean(savedPrefs?.partialCreditEnabled));
+
+  // Automatically retain the user's last setup settings across simulations
+  useEffect(() => {
+    saveSetupPrefs({
+      preset,
+      showCustom,
+      goalRanking,
+      name,
+      selectedPortfolioId,
+      useExplicitBudget,
+      customBudgetInput,
+      annualRate,
+      fundingProfile,
+      budgetTightness,
+      politicalProjects,
+      concurrentCap,
+      approvalLag,
+      riskMultiplier,
+      visibility,
+      fundingFrequency,
+      arcEnabled,
+      benefitsEnabled,
+      partialCreditEnabled,
+    });
+  }, [
+    preset,
+    showCustom,
+    goalRanking,
+    name,
+    selectedPortfolioId,
+    useExplicitBudget,
+    customBudgetInput,
+    annualRate,
+    fundingProfile,
+    budgetTightness,
+    politicalProjects,
+    concurrentCap,
+    approvalLag,
+    riskMultiplier,
+    visibility,
+    fundingFrequency,
+    arcEnabled,
+    benefitsEnabled,
+    partialCreditEnabled,
+  ]);
+
+  const handleResetToDefaultSettings = () => {
+    clearSetupPrefs();
+    setName(defaultRunDateName());
+    setAnnualRate(3);
+    setFundingProfile("scurve");
+    setFundingFrequency("3");
+    setBudgetTightness("1.5");
+    setRiskMultiplier("1.0");
+    setPoliticalProjects(2);
+    setConcurrentCap("0");
+    setApprovalLag("0");
+    setVisibility("full");
+    setArcEnabled(true);
+    setBenefitsEnabled(false);
+    setPartialCreditEnabled(false);
+    setSelectedPortfolioId("procedural");
+    setUseExplicitBudget(false);
+    setCustomBudgetInput(170);
+    setGoalRanking(DEFAULT_GOAL_RANKING);
+  };
 
   const arcLocked = preset === "learning" || preset === "advanced";
   const benefitsLocked = preset === "advanced";
@@ -2531,6 +2635,32 @@ function SetupScreen({
           {/* custom parameters + Custom Project Pool & Total Budget */}
           {(showCustom || preset === "custom") && (
             <div style={{ borderTop: `1px solid ${T.line}`, paddingTop: 18, marginTop: 4 }}>
+              {/* Custom Settings Retention Bar + Reset to Defaults Button */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 10,
+                  marginBottom: 12,
+                  flexWrap: "wrap",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: T.text, textTransform: "uppercase", letterSpacing: ".05em" }}>
+                    Custom Simulation Parameters
+                  </span>
+                  <Badge color={T.action}>Last settings auto-retained</Badge>
+                </div>
+                <Btn
+                  onClick={handleResetToDefaultSettings}
+                  title="Reset all custom parameters, budget, portfolio selection, and goal rankings back to their default values"
+                  style={{ padding: "5px 10px", fontSize: 12 }}
+                >
+                  <RotateCcw size={13} /> Reset to Default Settings
+                </Btn>
+              </div>
+
               {/* CUSTOM PORTFOLIO & TOTAL BUDGET CARD */}
               <div style={{ background: T.panel2, border: `1px solid ${T.line}`, borderRadius: 10, padding: 14, marginBottom: 18 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
@@ -2829,6 +2959,14 @@ function SetupScreen({
               >
                 <Sparkles size={16} /> Auto-Optimize & Play
               </button>
+            )}
+            {(showCustom || preset === "custom") && (
+              <Btn
+                onClick={handleResetToDefaultSettings}
+                title="Reset all custom parameters, budget, portfolio selection, and goal rankings back to default settings"
+              >
+                <RotateCcw size={15} /> Reset Defaults
+              </Btn>
             )}
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
               <Btn onClick={() => setShowLeaderboard(true)} title="View leaderboard">

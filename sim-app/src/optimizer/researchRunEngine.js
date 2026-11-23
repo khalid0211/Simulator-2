@@ -599,11 +599,16 @@ export function exportResearchRunToExcel(researchRun) {
       "Abandonments": m.abandonedCount ?? 0,
       "Expired": m.expiredCount ?? 0,
       "Total Budget ($M)": +(e.config?.totalBudget || 0).toFixed(2),
+      "Budget Tightness (x)": +(e.config?.budgetTightness ?? 1.5),
       "Inflation (%)": +((e.config?.annualRate || 0) * 100).toFixed(1),
       "Funding Profile": e.config?.fundingProfile || "",
-      "Cadence (Mo)": e.config?.fundingFrequency || 3,
+      "Cadence (Mo)": e.config?.fundingFrequency ?? 3,
+      "Risk Multiplier (x)": +(e.config?.riskMultiplier ?? 1.0),
       "Political Forced": e.config?.politicalProjects ?? 0,
+      "Concurrent Cap": e.config?.concurrentCap ? e.config.concurrentCap : "Unlimited",
+      "Approval Lag (Mo)": e.config?.approvalLag ?? 0,
       "ARC Wallet": e.config?.arcEnabled ? "ON" : "OFF",
+      "Social Benefits": e.config?.benefitsEnabled !== false ? "ON" : "OFF",
       "Partial Credit": e.config?.partialCreditEnabled ? "ON" : "OFF",
       "Seed": e.seed,
     };
@@ -742,6 +747,21 @@ export function exportResearchRunToMarkdown(researchRun) {
       const ac = e.actionCounts || {};
       lines.push(
         `| **#${e.runNumber}** | ${e.label} | ${formatGoalRankingShort(e.goalRanking)} | **${(e.evaluation?.simScore || 0).toFixed(1)}** (${e.evaluation?.band || ""}) | ${(e.evaluation?.weightedGoalScore || 0).toFixed(1)} | **${m.completedCount}/${m.maxComp}** | **${pct(m.avgAlignment)}** | **${pct(m.utilizationRate)}** | ${money(m.unspentCash)} | **${Math.round(m.totalRealizedBU || 0).toLocaleString()} BU** | ${money(e.config?.totalBudget)} | ${ac.add || 0} / ${ac.speed || 0} / ${ac.slow || 0} |`
+      );
+    });
+    lines.push("");
+    lines.push("### 2.1 Scenario Parameters Recorded Per Run");
+    lines.push("");
+    lines.push(
+      "| Run # | Budget ($M) | Tightness | Inflation | Funding Profile | Cadence | Risk Env | Political | Concurrent Cap | Approval Lag | ARC Wallet | Partial Credit | Seed |"
+    );
+    lines.push(
+      "| :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |"
+    );
+    entries.forEach((e) => {
+      const c = e.config || {};
+      lines.push(
+        `| **#${e.runNumber}** | ${money(c.totalBudget)} | ${c.budgetTightness ?? 1.5}× | ${((c.annualRate || 0) * 100).toFixed(1)}% | ${c.fundingProfile || "scurve"} | ${c.fundingFrequency ?? 3}m | ${(c.riskMultiplier ?? 1.0).toFixed(1)}× | ${c.politicalProjects ?? 0} | ${c.concurrentCap ? c.concurrentCap : "Unlimited"} | ${c.approvalLag ?? 0}m | ${c.arcEnabled ? "ON" : "OFF"} | ${c.partialCreditEnabled ? "ON" : "OFF"} | \`${e.seed ?? "—"}\` |`
       );
     });
   }
