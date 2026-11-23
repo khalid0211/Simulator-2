@@ -117,7 +117,7 @@ export async function createResearchRun({
       buRate:
         p.buRate ||
         computeDefaultBuRate(p.bacInitial, p.subCategory, costRiskBase, durRiskBase),
-      political: Boolean(p.political || p.politicalPreFlagged),
+      political: Boolean(p.politicalPreFlagged),
     };
   });
 

@@ -2167,8 +2167,11 @@ function SetupScreen({
     try {
       let targetRR = activeResearchRun;
       const cfg = buildConfig();
-      if (!targetRR) {
-        targetRR = await handleCreateResearchRun(`Goal Ranking Study — ${cfg.name || "Portfolio"}`);
+      const targetPfId = cfg.customPortfolioId || "procedural";
+      if (!targetRR || (targetRR.portfolioId || "procedural") !== targetPfId) {
+        targetRR = await handleCreateResearchRun(
+          `Goal Ranking Study — ${cfg.customPortfolioName || cfg.name || "Portfolio"}`
+        );
       }
       const batchRankings = [
         { label: "Projects First (#1 Projects)", ranking: ["projects", "alignment", "utilization", "benefits"] },
@@ -2655,24 +2658,6 @@ function SetupScreen({
                 </div>
               </div>
 
-              {/* AI AUTO-OPTIMIZER GOAL RANKING CARD + RESEARCH RUN STUDIO */}
-              <GoalRankingSelector
-                goalRanking={goalRanking}
-                onChange={(nextRank) => {
-                  setPreset("custom");
-                  setGoalRanking(nextRank);
-                }}
-                researchRuns={researchRuns}
-                activeResearchRun={activeResearchRun}
-                onSelectResearchRun={(rr) => setActiveResearchRun(rr)}
-                onCreateResearchRun={handleCreateResearchRun}
-                onDeleteResearchRun={handleDeleteResearchRun}
-                onOpenResearchReport={onOpenResearchReport}
-                onRunBatchComparison={handleRunBatchComparison}
-                isBatchRunning={isBatchRunning}
-                T={T}
-              />
-
               {/* Partial Credit for Unfinished Projects at End of 5-Year Window (Custom Mode Option) */}
               <div
                 style={{
@@ -2734,7 +2719,7 @@ function SetupScreen({
                 </button>
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 20px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 20px", marginBottom: 6 }}>
                 {/* col 1 */}
                 <div>
                   <label style={{ fontSize: 12, color: T.muted, textTransform: "uppercase", letterSpacing: ".05em", display: "block", marginBottom: 6 }}>
@@ -2765,6 +2750,24 @@ function SetupScreen({
                   <SelectRow label="Scoring visibility" value={visibility}   onChange={setVisibility}     options={VIS_LABELS} />
                 </div>
               </div>
+
+              {/* AI AUTO-OPTIMIZER GOAL RANKING CARD + RESEARCH RUN STUDIO (placed after all parameter choices) */}
+              <GoalRankingSelector
+                goalRanking={goalRanking}
+                onChange={(nextRank) => {
+                  setPreset("custom");
+                  setGoalRanking(nextRank);
+                }}
+                researchRuns={researchRuns}
+                activeResearchRun={activeResearchRun}
+                onSelectResearchRun={(rr) => setActiveResearchRun(rr)}
+                onCreateResearchRun={handleCreateResearchRun}
+                onDeleteResearchRun={handleDeleteResearchRun}
+                onOpenResearchReport={onOpenResearchReport}
+                onRunBatchComparison={handleRunBatchComparison}
+                isBatchRunning={isBatchRunning}
+                T={T}
+              />
             </div>
           )}
 
@@ -2785,9 +2788,12 @@ function SetupScreen({
                 type="button"
                 onClick={async () => {
                   const cfg = buildConfig();
+                  const targetPfId = cfg.customPortfolioId || "procedural";
                   let targetRR = activeResearchRun;
-                  if (!targetRR) {
-                    targetRR = await handleCreateResearchRun(`Research: ${cfg.name || "Portfolio Study"}`);
+                  if (!targetRR || (targetRR.portfolioId || "procedural") !== targetPfId) {
+                    targetRR = await handleCreateResearchRun(
+                      `Research: ${cfg.customPortfolioName || cfg.name || "Portfolio Study"}`
+                    );
                   }
                   onStartAutoOptimize(
                     {
